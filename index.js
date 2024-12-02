@@ -1,19 +1,24 @@
 const express = require('express');
 const cors = require('cors');
 const jwt= require('jsonwebtoken')
-// const cookieParser = require('cookie-parser');
-// const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const cookieParser = require('cookie-parser');
+const { MongoClient, ServerApiVersion } = require('mongodb');
 require('dotenv').config()
 const port = process.env.port || 9000
 const app = express()
 
 // middlewares
-app.use(cors())
+app.use(cors({
+    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    credentials: true,
+    optionsSuccessStatus: 200
+  }))
 app.use(express.json())
+app.use(cookieParser())
 
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
-const uri = "mongodb+srv://<db_username>:<db_password>@cluster0.awpu5n8.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.awpu5n8.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -26,14 +31,27 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    
+    const menuCollection = client.db('BistroBoss').collection('menu')
+    const reviewCollection = client.db('BistroBoss').collection('review')
+
+    // menu related API
+    app.get('/menu', async(req, res)=>{
+        const result = await menuCollection.find().toArray()
+        res.send(result)
+    })
+
+    // review related API
+    app.get('/review', async(req, res)=>{
+        const result = await reviewCollection.find().toArray()
+        res.send(result)
+    })
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
-    await client.close();
+    // await client.close();
   }
 }
 run().catch(console.dir);
