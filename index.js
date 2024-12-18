@@ -16,6 +16,27 @@ app.use(cors({
 app.use(express.json())
 app.use(cookieParser())
 
+// Custom middlewares
+const cookieOption = {
+  httpOnly: true,
+  sameSite: process.env.NODE_ENV === "production" ? 'none' : "strict",
+  secure: process.env.NODE_ENV === "production" ? true : false
+}
+const verifyToken = (req, res, next) => {
+  const token = req?.cookies?.token
+  // console.log("token in the middleware: ", token);
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized access" })
+  }
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({ message: "Unauthorized access" })
+    }
+    req.user = decoded
+    next()
+  })
+}
+
 
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.awpu5n8.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -37,24 +58,53 @@ async function run() {
     const reviewCollection = client.db('BistroBoss').collection('review')
     const cartCollection = client.db('BistroBoss').collection('cart')
 
+    // middleware
+    // use verify admin after verifying token
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.user.email
+      const query = { email: email }
+      const user = await userCollection.findOne(query)
+      const isAdmin = user?.role === "admin"
+      if (!isAdmin) {
+        return res.status(403).send({ message: "Forbidden  access" })
+      }
+      next()
+    }
+
     // JWT related API
     app.post('/jwt', async (req, res) => {
-      const user= req.body
-      const token= jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+      const user = req.body
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: '365d'
       })
-      res.send({token})
+      res
+        .cookie('token', token, cookieOption)
+        .send({ success: true })
     })
     // token removal after user logs out
-    app.post('/logout', async(req, res)=>{
-      const user= req.body
-      res.clearCookie('token', {...cookieOption, maxAge: 0}).send({success: true})
+    app.post('/logout', async (req, res) => {
+      const user = req.body
+      res.clearCookie('token', { ...cookieOption, maxAge: 0 }).send({ success: true })
     })
-    
+
     // user related API
-    app.get('/users', async (req, res) => {
+    app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
       const result = await userCollection.find().toArray()
       res.send(result)
+    })
+    // check for admin 
+    app.get('/users/admin/:email', verifyToken, async (req, res) => {
+      const email = req.params.email
+      if (email !== req.user.email) {
+        return res.status(403).send({ message: "Forbidden  access" })
+      }
+      const query = { email: email }
+      const user = await userCollection.findOne(query)
+      let admin = false
+      if (user) {
+        admin = user?.role === 'admin'
+      }
+      res.send({ admin })
     })
     app.post('/users', async (req, res) => {
       const user = req.body
@@ -68,13 +118,13 @@ async function run() {
       const result = await userCollection.insertOne(user)
       res.send(result)
     })
-    app.delete('/users/:id', async (req, res) => {
+    app.delete('/users/:id', verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id
       const query = { _id: new ObjectId(id) }
       const result = await userCollection.deleteOne(query)
       res.send(result)
     })
-    app.patch('/users/admin/:id', async (req, res) => {
+    app.patch('/users/admin/:id', verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id
       const filter = { _id: new ObjectId(id) }
       const updateDoc = {
