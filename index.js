@@ -61,7 +61,7 @@ async function run() {
     // middleware
     // use verify admin after verifying token
     const verifyAdmin = async (req, res, next) => {
-      const email = req.user.email
+      const email = req.user?.email
       const query = { email: email }
       const user = await userCollection.findOne(query)
       const isAdmin = user?.role === "admin"
@@ -136,17 +136,39 @@ async function run() {
       res.send(result)
     })
 
-    // menu related API
-    app.get('/menu', async (req, res) => {
-      const result = await menuCollection.find().toArray()
-      res.send(result)
-    })
 
     // review related API
     app.get('/review', async (req, res) => {
       const result = await reviewCollection.find().toArray()
       res.send(result)
     })
+
+    // menu related API
+    app.get('/menu', async (req, res) => {
+      const result = await menuCollection.find().toArray()
+      res.send(result)
+    })
+    // load a single item via id
+    app.get('/menu/:id', async(req, res)=>{
+      const id= req.params.id
+      const query= {_id: new ObjectId(id)}
+      const result= await menuCollection.findOne(query)
+      res.send(result)
+    })
+    // create menu items
+    app.post('/menu', verifyToken,verifyAdmin, async(req, res)=>{
+      const item = req.body
+      const result= await menuCollection.insertOne(item)
+      res.send(result)
+    })
+    // delete an item from the menu collection
+    app.delete('/menu/:id', verifyToken,verifyAdmin, async (req, res) => {
+      const id = req.params.id
+      const query = { _id: new ObjectId(id) }
+      const result = await menuCollection.deleteOne(query)
+      res.send(result)
+    })
+
 
     // cart related API
     // posting data to cart collection
